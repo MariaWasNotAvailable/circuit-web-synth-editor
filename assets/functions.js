@@ -1,10 +1,33 @@
+"use strict";
+
+var synthHistory = [];
+var synthHistoryValues = {};
+
 function controllerChange(channel, controller, value) {
     var input = document.querySelector('[name="' + controller +'"]');
     input.value = value;
 
     setBadgeValue(input, value);
+    updateStatusForControl(input);
 
     synthHistoryAdd(input.id, value);
+}
+
+function updateStatusForControl(control) {
+    var label = Array.from(document.querySelectorAll('label[for]'))
+        .find(function (item) { return item.htmlFor === control.id; });
+    var fieldset = control.closest('fieldset');
+    var legend = fieldset && fieldset.querySelector('legend');
+    var groupName = legend ? legend.textContent.trim().replace(/^Oscillator\s+/i, 'Osc ') : '';
+    var controlName = label ? label.textContent.trim() : control.id;
+    var status = document.querySelector('#status');
+    if (status.classList.contains('text-danger') || status.dataset.connectionState === 'waiting') {
+        return;
+    }
+
+    var description = [groupName, controlName].filter(Boolean).join(': ');
+
+    status.textContent = description + ': ' + control.value;
 }
 
 function dialogBox(question) {
@@ -47,12 +70,19 @@ function getLFO(lfo) {
 }
 
 function getCurrentSelectedPatch() {
+    if (!output) {
+        return;
+    }
+
     if (! dialogBox(WARNING_PATCH_LOAD)) {
         return;
     }
 
     var synth = parseInt(document.querySelector('#synth').value) -1;
-    output.sendSysex([0, 32, 41], [1, 96, 64, synth, 0]);
+    var productId = /\bcircuit\s+tracks\b/i.test(output.name)
+        ? CIRCUIT_TRACKS_PRODUCT_ID
+        : CIRCUIT_PRODUCT_ID;
+    output.sendSysex([0, 32, 41], [1, productId, 64, synth]);
 }
 
 function getData() {
@@ -126,7 +156,22 @@ function mergeDataWithSysexMetadata(data, category) {
 }
 
 function parseCircuitPatch(circuitData) {
-    synthHistoryInit();
+    var productId = circuitData[5];
+    var validProduct = productId === CIRCUIT_PRODUCT_ID || productId === CIRCUIT_TRACKS_PRODUCT_ID;
+    var isPatchDump = circuitData.length === 350
+        && circuitData[0] === 240
+        && circuitData[1] === 0
+        && circuitData[2] === 32
+        && circuitData[3] === 41
+        && circuitData[4] === 1
+        && validProduct
+        && circuitData[6] === 0
+        && circuitData[349] === 247;
+
+    if (!isPatchDump) {
+        console.warn('Ignoring invalid Circuit patch SysEx message (length: ' + circuitData.length + ').');
+        return;
+    }
 
     // Patch name
     var patchNameArr = circuitData.slice(9, 25);
@@ -136,7 +181,8 @@ function parseCircuitPatch(circuitData) {
         patchName += String.fromCharCode(patchNameArr[i]);
     }
 
-    document.querySelector('input[name="name"]').value = patchName.trim();
+    document.querySelector('input[name="name"]').value = patchName.replace(/\0+$/, '').trim();
+    document.querySelector('#category').value = circuitData[25];
 
     // Synth values
     var synthValuesArr = circuitData.slice(41, 349);
@@ -158,13 +204,13 @@ function parseCircuitPatch(circuitData) {
         if (item) {
             item.value = synthValuesArr[i];
 
-            synthHistoryAdd(item.id, item.value);
-
             if (item.type == 'range') {
                 setBadgeValue(item, item.value);
             }
         }
     }
+
+    synthHistoryInit();
 }
 
 function resetPatch() {
@@ -190,7 +236,9 @@ function resetPatch() {
 
     console.log("reset Patch", data);
 
-    output.sendSysex([0, 32, 41], data);
+    if (output) {
+        output.sendSysex([0, 32, 41], data);
+    }
 }
 
 function resetValues() {
@@ -205,14 +253,18 @@ function resetValues() {
             item.value = 0;
         }
 
-        synthHistoryAdd(item.id, item.value);
     }
 
     let patchName = document.querySelector('#patchName');
     patchName.value = '';
+    synthHistoryInit();
 }
 
 function sendMessage(control, value) {
+    if (!output) {
+        return;
+    }
+
     let synth = parseInt(document.querySelector('#synth').value);
 
     console.log("sendMessage", control, value, synth);
@@ -237,10 +289,9 @@ function setBadgeValue(inputRange, value) {
         value = value - inputRange.getAttribute("zero");
     }
 
-    try {
-        inputRange.previousElementSibling.previousElementSibling.innerText = value;
-    } catch(err) {
-        console.log(err, inputRange, value);
+    var valueBadge = inputRange.previousElementSibling.querySelector('.badge');
+    if (valueBadge) {
+        valueBadge.textContent = value;
     }
 }
 
@@ -318,58 +369,55 @@ function setLFO(data, lfo) {
 }
 
 function synthHistoryAdd(id, value) {
-    let length  = synthHistory.length;
-    let item = {
-        "id": id,
-        "value": value
-    };
+    value = String(value);
+    var previousValue = synthHistoryValues[id];
 
-    if (synthHistory[length -1] && synthHistory[length -1].id == id) {
-        synthHistory.pop();
+    if (previousValue === undefined || previousValue === value) {
+        synthHistoryValues[id] = value;
+        return;
     }
 
-    synthHistory.push(item);
+    var lastChange = synthHistory[synthHistory.length - 1];
+    if (!lastChange || lastChange.id !== id) {
+        synthHistory.push({id: id, value: previousValue});
+    }
+
+    synthHistoryValues[id] = value;
 }
 
 function synthHistoryInit() {
     synthHistory = [];
+    synthHistoryValues = {};
+
+    var items = document.querySelectorAll('fieldset input, fieldset select, #category');
+    for (var i = 0; i < items.length; i++) {
+        if (items[i].id) {
+            synthHistoryValues[items[i].id] = String(items[i].value);
+        }
+    }
 }
 
 function synthHistoryUndo() {
-    // Remove last action
     let undo = synthHistory.pop();
-
-    // Retrive in history the last value of the element undone
-    let previousValue = synthHistoryGetPreviousValue(undo.id);
-
-    if (!previousValue) {
-        synthHistory.push(undo);
+    if (!undo) {
         return;
     }
 
-    // Get DOM element and set his previous value
-    let element = document.querySelector('#' + undo.id);
-    element.value = previousValue;
+    let element = document.getElementById(undo.id);
+    if (!element) {
+        return;
+    }
 
-    // Update badge if range input
+    element.value = undo.value;
+    synthHistoryValues[undo.id] = undo.value;
+
     if (element.type == 'range') {
         setBadgeValue(element, element.value);
     }
 
-    // Send message
+    updateStatusForControl(element);
+
     sendMessage(element.name, element.value);
-}
-
-function synthHistoryGetPreviousValue(id) {
-    let reversedSynthHistory = synthHistory.slice().reverse();
-
-    for (var i = 0; i < reversedSynthHistory.length; i++) {
-        let item = reversedSynthHistory[i];
-
-        if (item.id == id) {
-            return item.value;
-        }
-    };
 }
 
 function writeSysexFile(data) {

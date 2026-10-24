@@ -1,6 +1,12 @@
+"use strict";
+
 var STATUS_CONNECTED = "Connected";
-var STATUS_NOT_CONNECTED = "No Circuit found. Plug it in and reload the page.";
+var STATUS_NOT_CONNECTED = "No Circuit or Circuit Tracks MIDI device found. Connect one and reload the page.";
 var STATUS_NOT_COMPATIBLE = "Web browser not compatible!";
+var STATUS_WAITING = "Waiting...";
+
+var CIRCUIT_PRODUCT_ID = 96;
+var CIRCUIT_TRACKS_PRODUCT_ID = 100;
 
 var WARNING_PATCH_LOAD = 'By loading a patch you are going to lose the current patch edition.';
 var WARNING_PATCH_NEW = 'By initializing a new patch you are going to lose the current patch edition.';

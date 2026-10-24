@@ -1,3 +1,5 @@
+"use strict";
+
 var allInputs = document.querySelectorAll('fieldset input');
 var allSelects = document.querySelectorAll('fieldset select');
 
@@ -14,8 +16,14 @@ for (let input of allInputs) {
         sendMessage(item.name, item.value);
     });
 
+    if (input.type === "range") {
+        input.addEventListener('change', function(event) {
+            updateStatusForControl(event.target);
+        });
+    }
+
     // Initialize badges
-    if (input.type = "range") {
+    if (input.type === "range") {
         setBadgeValue(input, input.getAttribute('default'));
     }
 }
@@ -26,6 +34,7 @@ for (let select of allSelects) {
 
         synthHistoryAdd(item.id, item.value);
 
+        updateStatusForControl(item);
         sendMessage(item.name, item.value);
     });
 }
@@ -90,6 +99,62 @@ for (let synthTab of synthTabs) {
             }
 
         }
+    });
+}
+
+var macroTabLists = document.querySelectorAll('.nav-pills[role="tablist"]');
+
+for (let tabList of macroTabLists) {
+    let macroTabs = tabList.querySelectorAll('a[role="tab"][href^="#"]');
+
+    for (let macroTab of macroTabs) {
+        macroTab.setAttribute('aria-selected', macroTab.classList.contains('active'));
+        macroTab.tabIndex = macroTab.classList.contains('active') ? 0 : -1;
+
+        macroTab.addEventListener('click', function(event) {
+            var tab = event.currentTarget;
+            var panelId = tab.getAttribute('href').slice(1);
+            var panel = document.getElementById(panelId);
+            var tabContent = tabList.nextElementSibling;
+
+            if (!panel || !tabContent || !tabContent.contains(panel)) {
+                return;
+            }
+
+            event.preventDefault();
+
+            for (let siblingTab of macroTabs) {
+                var isActive = siblingTab === tab;
+                siblingTab.classList.toggle('active', isActive);
+                siblingTab.setAttribute('aria-selected', isActive);
+                siblingTab.tabIndex = isActive ? 0 : -1;
+            }
+
+            for (let siblingPanel of tabContent.querySelectorAll('.tab-pane')) {
+                siblingPanel.classList.toggle('active', siblingPanel === panel);
+            }
+        });
+    }
+
+    tabList.addEventListener('keydown', function(event) {
+        var activeTabIndex = Array.from(macroTabs).indexOf(document.activeElement);
+        var nextTabIndex;
+
+        if (event.key === 'ArrowRight') {
+            nextTabIndex = (activeTabIndex + 1) % macroTabs.length;
+        } else if (event.key === 'ArrowLeft') {
+            nextTabIndex = (activeTabIndex - 1 + macroTabs.length) % macroTabs.length;
+        } else if (event.key === 'Home') {
+            nextTabIndex = 0;
+        } else if (event.key === 'End') {
+            nextTabIndex = macroTabs.length - 1;
+        } else {
+            return;
+        }
+
+        event.preventDefault();
+        macroTabs[nextTabIndex].focus();
+        macroTabs[nextTabIndex].click();
     });
 }
 
