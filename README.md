@@ -35,6 +35,10 @@ npm run build
 
 The production build bundles and minifies the JavaScript and CSS with webpack. The deployable app is generated in `dist/`; it contains the built page, its assets, and a copy of the license. Deploy or distribute the contents of that directory. The source `index.html` remains in the repository.
 
+## Deployment
+
+Pushes to `master` build the app and publish `dist/` to the `circuit-web-synth-editor/` directory on the `main` branch of [MariaWasNotAvailable.github.io](https://github.com/MariaWasNotAvailable/MariaWasNotAvailable.github.io). The workflow uses the `PAGES_REPO_TOKEN` Actions secret to write to that repository.
+
 ## Troubleshooting
 
 - Avoid running another editor or MIDI application connected to the Circuit while editing; competing MIDI messages can cause unwanted changes.

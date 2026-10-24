@@ -35,7 +35,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: MariaWasNotAvailable/MariaWasNotAvailable.github.io
-          ref: master
+          ref: main
           token: ${{ secrets.PAGES_REPO_TOKEN }}
           path: website
 
@@ -50,5 +50,5 @@ jobs:
             echo "No deployment changes to publish."
           else
             git -C website commit -m "Deploy Circuit Web Synth Editor"
-            git -C website push origin HEAD:master
+            git -C website push origin HEAD:main
           fi
